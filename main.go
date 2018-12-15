@@ -93,15 +93,15 @@ func main() {
 	flag.DurationVar(&sla, "sla", 500*time.Millisecond, "Max acceptable latency")
 	flag.DurationVar(&duration, "duration", time.Minute, "Duration for each latency test")
 	flag.Float64Var(&percentile, "percentile", 99, "The percentile that latency is measured at")
-	flag.Float64Var(&scaleupPercent, "scaleup-percent", 0.1, "Percent of duration to scale up rps before each latency test")
+	flag.Float64Var(&scaleupPercent, "scaleup-percent", 10, "Percent of duration to scale up rps before each latency test")
 	flag.IntVar(&scaleupSteps, "scaleup-steps", 10, "number of steps to go from 0 to max rps")
 	flag.Parse()
-	if flag.NArg() == 0 || scaleupPercent < 0 {
+	if flag.NArg() == 0 || rps <= 0 || scaleupPercent < 0 || scaleupPercent > 100 || scaleupSteps <= 0 || percentile < 0 || percentile > 100 {
 		flag.Usage()
 		os.Exit(1)
 	}
 	url := flag.Arg(0)
-	scaleupDuration := time.Duration(scaleupPercent*duration.Seconds()) * time.Second
+	scaleupDuration := time.Duration(scaleupPercent/100*duration.Seconds()) * time.Second
 
 	okRate := 1
 	var nokRate int
