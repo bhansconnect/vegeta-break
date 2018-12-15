@@ -26,6 +26,7 @@ func testRate(rps int, sla time.Duration, duration time.Duration, percentile flo
 	target.Header.Add("Accept-Encoding", "gzip, deflate")
 	targeter := vegeta.NewStaticTargeter(target)
 	attacker := vegeta.NewAttacker()
+	metrics := vegeta.Metrics{}
 
 	hist := hdrhistogram.New(1, 3600000, 3)
 
@@ -43,14 +44,11 @@ func testRate(rps int, sla time.Duration, duration time.Duration, percentile flo
 	}
 	fmt.Printf("Starting %d req/sec Load Test for %s...\n", rps, duration)
 	vrate := vegeta.Rate{Freq: rps, Per: time.Second}
-	var errors int64
 	for res := range attacker.Attack(targeter, vrate, duration, "Latency Test") {
-		if res.Code <= 400 {
-			hist.RecordValue(res.Latency.Nanoseconds() / 1e3)
-		} else {
-			errors++
-		}
+		metrics.Add(res)
+		hist.RecordValue(res.Latency.Nanoseconds() / 1e3)
 	}
+	metrics.Close()
 
 	file, err := os.OpenFile(fmt.Sprintf("lat_%d.txt", rps), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
@@ -59,20 +57,15 @@ func testRate(rps int, sla time.Duration, duration time.Duration, percentile flo
 	defer file.Close()
 	histwriter.WriteDistribution(hist, histwriter.Logarithmic, 1e-3, file)
 
-	//adjust percentile for errors. For example if 1% errors, then adjusted 99% is 100%
-	var adjustedPercentile float64
-	if errors > 0 {
-		fmt.Printf("💥  %f%% of requests were errors\n", float64(100*errors)/float64(hist.TotalCount()+errors))
-		adjustedPercentile = (float64(hist.TotalCount()+errors) * percentile) / float64(hist.TotalCount())
-		if adjustedPercentile > 100 {
-			fmt.Printf("💥  Failed at %d req/sec (too many errors)\n", rps)
-			return false
-		}
-	} else {
-		adjustedPercentile = percentile
+	latency := time.Duration(hist.ValueAtQuantile(percentile)) * time.Microsecond
+	if 100*metrics.Success < percentile {
+		fmt.Printf("💥  Failed at %d req/sec (errors: %f%%)\n", rps, 100*(1-metrics.Success))
+		return false
 	}
-
-	latency := time.Duration(hist.ValueAtQuantile(adjustedPercentile)) * time.Microsecond
+	if metrics.Rate < float64(rps) && float64(rps)-metrics.Rate > 1 {
+		fmt.Printf("💥  Failed at %d req/sec (Only managed to get to %f req/sec)\n", rps, metrics.Rate)
+		return false
+	}
 	if latency > sla {
 		fmt.Printf("💥  Failed at %d req/sec (latency %s)\n", rps, latency)
 		return false
