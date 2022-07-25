@@ -6,6 +6,8 @@ import (
 	"math"
 	"os"
 	"time"
+	"bytes"
+	"io/ioutil"
 
 	hdrhistogram "github.com/HdrHistogram/hdrhistogram-go"
 	ct "github.com/daviddengcn/go-colortext"
@@ -56,13 +58,11 @@ func testRate(rps int, sla time.Duration, duration time.Duration, percentile flo
 	}
 	metrics.Close()
 
-	file, err := os.OpenFile(fmt.Sprintf("lat_%d.txt", rps), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-	if err != nil {
+	var buff bytes.Buffer
+	if _, err := hist.PercentilesPrint(&buff, 10, 1.0); err != nil {
 		panic(err)
 	}
-	defer file.Close()
-	err = hdrhistogram.NewHistogramLogWriter(file).OutputIntervalHistogram(hist)
-	if err != nil {
+	if err := ioutil.WriteFile(fmt.Sprintf("lat_%d.txt", rps), buff.Bytes(), 0644); err != nil{
 		panic(err)
 	}
 
