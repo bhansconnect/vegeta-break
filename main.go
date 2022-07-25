@@ -7,10 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/codahale/hdrhistogram"
+	hdrhistogram "github.com/HdrHistogram/hdrhistogram-go"
 	ct "github.com/daviddengcn/go-colortext"
 	vegeta "github.com/tsenart/vegeta/lib"
-	histwriter "github.com/tylertreat/hdrhistogram-writer"
 )
 
 func usage() {
@@ -62,7 +61,10 @@ func testRate(rps int, sla time.Duration, duration time.Duration, percentile flo
 		panic(err)
 	}
 	defer file.Close()
-	histwriter.WriteDistribution(hist, histwriter.Logarithmic, 1e-3, file)
+	err = hdrhistogram.NewHistogramLogWriter(file).OutputIntervalHistogram(hist)
+	if err != nil {
+		panic(err)
+	}
 
 	latency := time.Duration(hist.ValueAtQuantile(percentile)) * time.Microsecond
 	if 100*metrics.Success < percentile {
