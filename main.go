@@ -19,10 +19,11 @@ func usage() {
 	flag.PrintDefaults()
 }
 
-func testRate(rps int, sla time.Duration, duration time.Duration, percentile float64, scaleupDuration time.Duration, scaleupSteps int, url string) bool {
+func testRate(rps int, sla time.Duration, duration time.Duration, percentile float64, scaleupDuration time.Duration, scaleupSteps int, url, method string, body []byte) bool {
 	target := vegeta.Target{
-		Method: "GET",
+		Method: method,
 		URL:    url,
+		Body: body,
 		Header: make(map[string][]string),
 	}
 	target.Header.Add("Accept-Encoding", "gzip, deflate")
@@ -100,6 +101,8 @@ func main() {
 	var scaleupSteps int
 	var rps int
 	var sla time.Duration
+	var bodyFile string
+	var method string
 	flag.IntVar(&rps, "rps", 20, "Starting requests per second")
 	flag.DurationVar(&sla, "sla", 500*time.Millisecond, "Max acceptable latency")
 	flag.DurationVar(&duration, "duration", time.Minute, "Duration for each latency test")
@@ -107,6 +110,8 @@ func main() {
 	flag.Float64Var(&scaleupPercent, "scaleup-percent", 10, "Percent of duration to scale up rps before each latency test")
 	flag.Float64Var(&rpsAccuracy, "rps-accuracy", 100, "How close the output should be to the correct rps. 100 is exact rps. 95 would be within 5%")
 	flag.IntVar(&scaleupSteps, "scaleup-steps", 10, "number of steps to go from 0 to max rps")
+	flag.StringVar(&bodyFile, "body-file", "", "a file to be read and used as the body of each request")
+	flag.StringVar(&method, "method", "GET", "the http request method")
 	flag.Parse()
 	if flag.NArg() == 0 || rps <= 0 || scaleupPercent < 0 || scaleupPercent > 100 || scaleupSteps <= 0 {
 		flag.Usage()
@@ -116,6 +121,15 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+	var body []byte
+	if bodyFile != "" {
+		bytes, err := ioutil.ReadFile(bodyFile);
+		if err != nil {
+			fmt.Printf("Failed to load body from file %q\n", bodyFile)
+			os.Exit(1)
+		}
+		body = bytes
+	}
 	url := flag.Arg(0)
 	scaleupDuration := time.Duration(scaleupPercent/100*duration.Seconds()) * time.Second
 
@@ -123,7 +137,7 @@ func main() {
 	var nokRate int
 	// first, find the point at which the system breaks
 	for {
-		if testRate(rps, sla, duration, percentile, scaleupDuration, scaleupSteps, url) {
+		if testRate(rps, sla, duration, percentile, scaleupDuration, scaleupSteps, url, method, body) {
 			okRate = rps
 			rps *= 2
 		} else {
@@ -136,7 +150,7 @@ func main() {
 	rpsAccuracy = rpsAccuracy / 100.0
 	for float64(okRate)/float64(nokRate-1) < rpsAccuracy {
 		rps = (nokRate + okRate) / 2
-		if testRate(rps, sla, duration, percentile, scaleupDuration, scaleupSteps, url) {
+		if testRate(rps, sla, duration, percentile, scaleupDuration, scaleupSteps, url, method, body) {
 			okRate = rps
 		} else {
 			nokRate = rps
