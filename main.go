@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math"
 	"os"
 	"time"
 	"bytes"
@@ -19,7 +18,7 @@ func usage() {
 	flag.PrintDefaults()
 }
 
-func testRate(rps int, sla time.Duration, duration time.Duration, percentile float64, scaleupDuration time.Duration, scaleupSteps int, url, method string, body []byte) bool {
+func testRate(rps int, sla time.Duration, duration time.Duration, percentile float64, url, method string, body []byte) bool {
 	target := vegeta.Target{
 		Method: method,
 		URL:    url,
@@ -33,24 +32,6 @@ func testRate(rps int, sla time.Duration, duration time.Duration, percentile flo
 
 	hist := hdrhistogram.New(1, 3600000, 3)
 
-	//Limit scaleup steps to numder of seconds for scaling up
-	//Vegeta doesn't seem to like shorter attacks
-	if int(scaleupDuration.Seconds()) < scaleupSteps {
-		scaleupSteps = int(scaleupDuration.Seconds())
-
-	}
-	scaleupRate := float64(rps) / float64(scaleupSteps)
-	subDuration := scaleupDuration / time.Duration(scaleupSteps)
-	fmt.Printf("%s Starting %d req/sec Scaleup for %s...\n", time.Now().Format("[2006-01-02T15:04:05]"), rps, scaleupDuration)
-	for i := 0; i < scaleupSteps; i++ {
-		r := int(math.Ceil(float64(i+1) * scaleupRate))
-		if r > rps {
-			r = rps
-		}
-		vrate := vegeta.Rate{Freq: r, Per: time.Second}
-		for range attacker.Attack(targeter, vrate, subDuration, "Scale Up") {
-		}
-	}
 	fmt.Printf("%s Starting %d req/sec Load Test for %s...\n", time.Now().Format("[2006-01-02T15:04:05]"), rps, duration)
 	vrate := vegeta.Rate{Freq: rps, Per: time.Second}
 	for res := range attacker.Attack(targeter, vrate, duration, "Latency Test") {
@@ -96,9 +77,7 @@ func main() {
 	flag.Usage = usage
 	var duration time.Duration
 	var percentile float64
-	var scaleupPercent float64
 	var rpsAccuracy float64
-	var scaleupSteps int
 	var rps int
 	var sla time.Duration
 	var bodyFile string
@@ -107,13 +86,11 @@ func main() {
 	flag.DurationVar(&sla, "sla", 500*time.Millisecond, "Max acceptable latency")
 	flag.DurationVar(&duration, "duration", time.Minute, "Duration for each latency test")
 	flag.Float64Var(&percentile, "percentile", 99.9, "The percentile that latency is measured at")
-	flag.Float64Var(&scaleupPercent, "scaleup-percent", 10, "Percent of duration to scale up rps before each latency test")
 	flag.Float64Var(&rpsAccuracy, "rps-accuracy", 100, "How close the output should be to the correct rps. 100 is exact rps. 95 would be within 5%")
-	flag.IntVar(&scaleupSteps, "scaleup-steps", 10, "number of steps to go from 0 to max rps")
 	flag.StringVar(&bodyFile, "body-file", "", "a file to be read and used as the body of each request")
 	flag.StringVar(&method, "method", "GET", "the http request method")
 	flag.Parse()
-	if flag.NArg() == 0 || rps <= 0 || scaleupPercent < 0 || scaleupPercent > 100 || scaleupSteps <= 0 {
+	if flag.NArg() == 0 || rps <= 0 {
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -131,13 +108,12 @@ func main() {
 		body = bytes
 	}
 	url := flag.Arg(0)
-	scaleupDuration := time.Duration(scaleupPercent/100*duration.Seconds()) * time.Second
 
 	okRate := 1
 	var nokRate int
 	// first, find the point at which the system breaks
 	for {
-		if testRate(rps, sla, duration, percentile, scaleupDuration, scaleupSteps, url, method, body) {
+		if testRate(rps, sla, duration, percentile, url, method, body) {
 			okRate = rps
 			rps *= 2
 		} else {
@@ -150,7 +126,7 @@ func main() {
 	rpsAccuracy = rpsAccuracy / 100.0
 	for float64(okRate)/float64(nokRate-1) < rpsAccuracy {
 		rps = (nokRate + okRate) / 2
-		if testRate(rps, sla, duration, percentile, scaleupDuration, scaleupSteps, url, method, body) {
+		if testRate(rps, sla, duration, percentile, url, method, body) {
 			okRate = rps
 		} else {
 			nokRate = rps
