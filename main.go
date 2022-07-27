@@ -1,12 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"math"
 	"os"
 	"time"
-	"bytes"
-	"io/ioutil"
 
 	hdrhistogram "github.com/HdrHistogram/hdrhistogram-go"
 	ct "github.com/daviddengcn/go-colortext"
@@ -22,7 +23,7 @@ func testRate(rps int, sla time.Duration, duration time.Duration, percentile flo
 	target := vegeta.Target{
 		Method: method,
 		URL:    url,
-		Body: body,
+		Body:   body,
 		Header: make(map[string][]string),
 	}
 	target.Header.Add("Accept-Encoding", "gzip, deflate")
@@ -44,7 +45,7 @@ func testRate(rps int, sla time.Duration, duration time.Duration, percentile flo
 	if _, err := hist.PercentilesPrint(&buff, 10, 1.0); err != nil {
 		panic(err)
 	}
-	if err := ioutil.WriteFile(fmt.Sprintf("lat_%d.txt", rps), buff.Bytes(), 0644); err != nil{
+	if err := ioutil.WriteFile(fmt.Sprintf("lat_%d.txt", rps), buff.Bytes(), 0644); err != nil {
 		panic(err)
 	}
 
@@ -76,6 +77,7 @@ func testRate(rps int, sla time.Duration, duration time.Duration, percentile flo
 func main() {
 	flag.Usage = usage
 	var duration time.Duration
+	var climbMultiple float64
 	var percentile float64
 	var rpsAccuracy float64
 	var rps int
@@ -87,20 +89,17 @@ func main() {
 	flag.DurationVar(&duration, "duration", time.Minute, "Duration for each latency test")
 	flag.Float64Var(&percentile, "percentile", 99.9, "The percentile that latency is measured at")
 	flag.Float64Var(&rpsAccuracy, "rps-accuracy", 100, "How close the output should be to the correct rps. 100 is exact rps. 95 would be within 5%")
+	flag.Float64Var(&climbMultiple, "climb-multiple", 2.0, "How many times more requests to send after a success. Must be greater than 1.0")
 	flag.StringVar(&bodyFile, "body-file", "", "a file to be read and used as the body of each request")
 	flag.StringVar(&method, "method", "GET", "the http request method")
 	flag.Parse()
-	if flag.NArg() == 0 || rps <= 0 {
-		flag.Usage()
-		os.Exit(1)
-	}
-	if percentile < 0 || percentile > 100 || rpsAccuracy > 100 || rpsAccuracy <= 0 {
+	if flag.NArg() == 0 || rps <= 0 || climbMultiple <= 1.0 || percentile < 0 || percentile > 100 || rpsAccuracy > 100 || rpsAccuracy <= 0 {
 		flag.Usage()
 		os.Exit(1)
 	}
 	var body []byte
 	if bodyFile != "" {
-		bytes, err := ioutil.ReadFile(bodyFile);
+		bytes, err := ioutil.ReadFile(bodyFile)
 		if err != nil {
 			fmt.Printf("Failed to load body from file %q\n", bodyFile)
 			os.Exit(1)
@@ -115,7 +114,7 @@ func main() {
 	for {
 		if testRate(rps, sla, duration, percentile, url, method, body) {
 			okRate = rps
-			rps *= 2
+			rps = int(math.Ceil(float64(rps) * climbMultiple))
 		} else {
 			nokRate = rps
 			break
