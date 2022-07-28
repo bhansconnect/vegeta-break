@@ -20,7 +20,7 @@ func usage() {
 	flag.PrintDefaults()
 }
 
-func testRate(rps int, sla, duration, maxTimeout time.Duration, maxConnections int, percentile float64, url, method string, body []byte, keepAlive bool) bool {
+func testRate(rps int, sla, duration, maxTimeout time.Duration, maxConnections int, maxWorkers uint64, percentile float64, url, method string, body []byte, keepAlive bool) bool {
 	target := vegeta.Target{
 		Method: method,
 		URL:    url,
@@ -29,7 +29,7 @@ func testRate(rps int, sla, duration, maxTimeout time.Duration, maxConnections i
 	}
 	target.Header.Add("Accept-Encoding", "gzip, deflate")
 	targeter := vegeta.NewStaticTargeter(target)
-	attacker := vegeta.NewAttacker(vegeta.Timeout(maxTimeout), vegeta.KeepAlive(keepAlive), vegeta.Connections(maxConnections))
+	attacker := vegeta.NewAttacker(vegeta.Timeout(maxTimeout), vegeta.KeepAlive(keepAlive), vegeta.Connections(maxConnections), vegeta.MaxWorkers(maxWorkers))
 	metrics := vegeta.Metrics{}
 
 	hist := hdrhistogram.New(1, 3600000, 3)
@@ -88,6 +88,7 @@ func main() {
 	var sla time.Duration
 	var maxTimeout time.Duration
 	var maxConnections int
+	var maxWorkers uint64
 	var keepAlive bool
 	var bodyFile string
 	var method string
@@ -96,6 +97,7 @@ func main() {
 	flag.DurationVar(&duration, "duration", time.Minute, "Duration for each latency test")
 	flag.DurationVar(&maxTimeout, "max-timeout", 3*time.Second, "Max time to wait before a response")
 	flag.IntVar(&maxConnections, "max-connections", 10000, "Max open idle connections per target host")
+	flag.Uint64Var(&maxWorkers, "max-workers", 10000, "Max workers to spawn connections from")
 	flag.BoolVar(&keepAlive, "keep-alive", true, "whether or not to use http keep alive connections")
 	flag.Float64Var(&percentile, "percentile", 99.9, "The percentile that latency is measured at")
 	flag.Float64Var(&rpsAccuracy, "rps-accuracy", 100, "How close the output should be to the correct rps. 100 is exact rps. 95 would be within 5%")
@@ -103,7 +105,7 @@ func main() {
 	flag.StringVar(&bodyFile, "body-file", "", "a file to be read and used as the body of each request")
 	flag.StringVar(&method, "method", "GET", "the http request method")
 	flag.Parse()
-	if flag.NArg() == 0 || rps <= 0 || maxConnections <= 0 || climbMultiple <= 1.0 || percentile < 0 || percentile > 100 || rpsAccuracy > 100 || rpsAccuracy <= 0 {
+	if flag.NArg() == 0 || rps <= 0 || maxConnections <= 0 || maxWorkers <= 0 || climbMultiple <= 1.0 || percentile < 0 || percentile > 100 || rpsAccuracy > 100 || rpsAccuracy <= 0 {
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -122,7 +124,7 @@ func main() {
 	var nokRate int
 	// first, find the point at which the system breaks
 	for {
-		if testRate(rps, sla, duration, maxTimeout, maxConnections, percentile, url, method, body, keepAlive) {
+		if testRate(rps, sla, duration, maxTimeout, maxConnections, maxWorkers, percentile, url, method, body, keepAlive) {
 			okRate = rps
 			rps = int(math.Ceil(float64(rps) * climbMultiple))
 		} else {
@@ -136,7 +138,7 @@ func main() {
 	rpsAccuracy = rpsAccuracy / 100.0
 	for float64(okRate)/float64(nokRate-1) < rpsAccuracy {
 		rps = (nokRate + okRate) / 2
-		if testRate(rps, sla, duration, maxTimeout, maxConnections, percentile, url, method, body, keepAlive) {
+		if testRate(rps, sla, duration, maxTimeout, maxConnections, maxWorkers, percentile, url, method, body, keepAlive) {
 			okRate = rps
 		} else {
 			nokRate = rps
