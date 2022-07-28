@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"runtime"
 	"time"
 
 	hdrhistogram "github.com/HdrHistogram/hdrhistogram-go"
@@ -48,6 +49,9 @@ func testRate(rps int, sla, duration, maxTimeout time.Duration, percentile float
 	if err := ioutil.WriteFile(fmt.Sprintf("lat_%d.txt", rps), buff.Bytes(), 0644); err != nil {
 		panic(err)
 	}
+
+	attacker = nil
+	targeter = nil
 
 	latency := time.Duration(hist.ValueAtQuantile(percentile)) * time.Microsecond
 	if 100*metrics.Success < percentile {
@@ -123,6 +127,7 @@ func main() {
 			nokRate = rps
 			break
 		}
+		runtime.GC()
 	}
 
 	// next, do a binary search between okRate and nokRate
@@ -134,6 +139,7 @@ func main() {
 		} else {
 			nokRate = rps
 		}
+		runtime.GC()
 	}
 	if nokRate-1 == okRate {
 		fmt.Printf("Maximum Working Rate: %d req/sec\n", okRate)
