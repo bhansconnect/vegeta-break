@@ -2,8 +2,6 @@ module github.com/bhansconnect/vegeta-break
 
 go 1.18
 
-replace github.com/codahale/hdrhistogram => github.com/HdrHistogram/hdrhistogram-go v1.1.2
-
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.1.2
 	github.com/daviddengcn/go-colortext v1.0.0
