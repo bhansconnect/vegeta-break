@@ -140,6 +140,7 @@ func main() {
 	// next, do a binary search between okRate and nokRate
 	rpsAccuracy = rpsAccuracy / 100.0
 	for float64(okRate)/float64(nokRate-1) < rpsAccuracy {
+		time.Sleep(restPeriod)
 		rps = (nokRate + okRate) / 2
 		if testRate(rps, sla, duration, maxTimeout, maxConnections, maxWorkers, percentile, url, method, body, keepAlive) {
 			okRate = rps
@@ -147,7 +148,6 @@ func main() {
 			nokRate = rps
 		}
 		runtime.GC()
-		time.Sleep(restPeriod)
 	}
 	if nokRate-1 == okRate {
 		fmt.Printf("Maximum Working Rate: %d req/sec\n", okRate)
