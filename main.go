@@ -81,6 +81,7 @@ func testRate(rps int, sla, duration, maxTimeout time.Duration, maxConnections i
 func main() {
 	flag.Usage = usage
 	var duration time.Duration
+	var restPeriod time.Duration
 	var climbMultiple float64
 	var percentile float64
 	var rpsAccuracy float64
@@ -95,6 +96,7 @@ func main() {
 	flag.IntVar(&rps, "rps", 20, "Starting requests per second")
 	flag.DurationVar(&sla, "sla", 500*time.Millisecond, "Max acceptable latency")
 	flag.DurationVar(&duration, "duration", time.Minute, "Duration for each latency test")
+	flag.DurationVar(&restPeriod, "rest-period", 10*time.Second, "Duration to sleep between each latency test")
 	flag.DurationVar(&maxTimeout, "max-timeout", 3*time.Second, "Max time to wait before a response")
 	flag.IntVar(&maxConnections, "max-connections", 10000, "Max open idle connections per target host")
 	flag.Uint64Var(&maxWorkers, "max-workers", 10000, "Max workers to spawn connections from")
@@ -132,6 +134,7 @@ func main() {
 			break
 		}
 		runtime.GC()
+		time.Sleep(restPeriod)
 	}
 
 	// next, do a binary search between okRate and nokRate
@@ -144,6 +147,7 @@ func main() {
 			nokRate = rps
 		}
 		runtime.GC()
+		time.Sleep(restPeriod)
 	}
 	if nokRate-1 == okRate {
 		fmt.Printf("Maximum Working Rate: %d req/sec\n", okRate)
