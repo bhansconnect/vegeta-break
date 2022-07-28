@@ -5,21 +5,29 @@
 Vegeta-break is a comandline tool for discovering the max requests per second a service can handle while staying below a specific latency. It also outputs detailed latency curve files that can be load into [HdrHistogram Plotter](hdrhistogram.github.io/HdrHistogram/plotFiles.html) in order to better understand how the application acts under stress. The tool does this by amping up the number of requests per second of the application while insuring it is under a max latency.
 
 ```
-Usage: vegeta-break [OPTIONS] url
- -duration duration
-       Duration for each latency test (default 1m0s)
- -percentile float
-       The percentile that latency is measured at (default 99.9)
- -rps int
-       Starting requests per second (default 20)
- -rps-accuracy float
-       How close the output should be to the correct rps. 100 is exact rps. 95 would be within 5% (default 100)
- -scaleup-percent float
-       Percent of duration to scale up rps before each latency test (default 10)
- -scaleup-steps int
-       number of steps to go from 0 to max rps (default 10)
- -sla duration
-       Max acceptable latency (default 500ms)
+Usage: ./vegeta-break [OPTIONS] url
+  -body-file string
+        a file to be read and used as the body of each request
+  -climb-multiple float
+        How many times more requests to send after a success. Must be greater than 1.0 (default 2)
+  -duration duration
+        Duration for each latency test (default 1m0s)
+  -keep-alive
+        whether or not to use http keep alive connections (default true)
+  -max-connections int
+        Max open idle connections per target host (default 10000)
+  -max-timeout duration
+        Max time to wait before a response (default 3s)
+  -method string
+        the http request method (default "GET")
+  -percentile float
+        The percentile that latency is measured at (default 99.9)
+  -rps int
+        Starting requests per second (default 20)
+  -rps-accuracy float
+        How close the output should be to the correct rps. 100 is exact rps. 95 would be within 5% (default 100)
+  -sla duration
+        Max acceptable latency (default 500ms)
 ```
 
 ## Inspiration and Background
